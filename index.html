@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="fi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Juoksusegmenttilaskuri</title>
+
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 20px;
+      background: #f6f6f6;
+      color: #111;
+    }
+
+    h1 {
+      font-size: 1.6rem;
+      margin-bottom: 8px;
+    }
+
+    .card {
+      background: white;
+      padding: 16px;
+      border-radius: 12px;
+      margin: 16px 0;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+
+    label {
+      display: block;
+      font-weight: 600;
+      margin-top: 12px;
+    }
+
+    input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 12px;
+      font-size: 1rem;
+      margin-top: 4px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+    }
+
+    button {
+      width: 100%;
+      padding: 14px;
+      font-size: 1rem;
+      font-weight: 700;
+      border: 0;
+      border-radius: 10px;
+      background: #111;
+      color: white;
+      margin-top: 16px;
+      cursor: pointer;
+    }
+
+    .segment {
+      border-top: 1px solid #ddd;
+      padding-top: 12px;
+      margin-top: 12px;
+    }
+
+    .result {
+      font-size: 1.1rem;
+      line-height: 1.5;
+    }
+
+    .muted {
+      color: #555;
+      font-size: 0.95rem;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>Juoksusegmenttilaskuri</h1>
+  <p class="muted">
+    Anna segmenttien kestot ja vauhdit. Vauhti muodossa esimerkiksi 5:30 tarkoittaa 5 min 30 s / km.
+  </p>
+
+  <div class="card">
+    <label for="segmentCount">Montako segmenttiä?</label>
+    <input id="segmentCount" type="number" min="1" value="3">
+
+    <button onclick="createSegments()">Luo segmentit</button>
+  </div>
+
+  <div id="segments" class="card"></div>
+
+  <button onclick="calculateRun()">Laske lenkki</button>
+
+  <div id="result" class="card result"></div>
+
+  <script>
+    function createSegments() {
+      const count = Number(document.getElementById("segmentCount").value);
+      const container = document.getElementById("segments");
+
+      if (!Number.isInteger(count) || count < 1) {
+        container.innerHTML = "<p>Anna segmenttien määräksi vähintään 1.</p>";
+        return;
+      }
+
+      let html = "<h2>Segmentit</h2>";
+
+      for (let i = 1; i <= count; i++) {
+        html += `
+          <div class="segment">
+            <h3>Segmentti ${i}</h3>
+
+            <label for="duration-${i}">Kesto</label>
+            <input id="duration-${i}" type="text" placeholder="esim. 10 tai 10:30">
+
+            <label for="pace-${i}">Juoksunopeus / vauhti min/km</label>
+            <input id="pace-${i}" type="text" placeholder="esim. 5:30">
+          </div>
+        `;
+      }
+
+      container.innerHTML = html;
+      document.getElementById("result").innerHTML = "";
+    }
+
+    function parseTimeToMinutes(value) {
+      const text = value.trim().replace(",", ".");
+
+      if (text.includes(":")) {
+        const parts = text.split(":");
+
+        if (parts.length !== 2) {
+          return NaN;
+        }
+
+        const minutes = Number(parts[0]);
+        const seconds = Number(parts[1]);
+
+        if (
+          !Number.isFinite(minutes) ||
+          !Number.isFinite(seconds) ||
+          minutes < 0 ||
+          seconds < 0 ||
+          seconds >= 60
+        ) {
+          return NaN;
+        }
+
+        return minutes + seconds / 60;
+      }
+
+      const number = Number(text);
+
+      if (!Number.isFinite(number) || number <= 0) {
+        return NaN;
+      }
+
+      return number;
+    }
+
+    function formatDistance(km) {
+      return km.toFixed(2).replace(".", ",") + " km";
+    }
+
+    function formatMinutes(minutes) {
+      const totalSeconds = Math.round(minutes * 60);
+      const min = Math.floor(totalSeconds / 60);
+      const sec = totalSeconds % 60;
+      return `${min}:${String(sec).padStart(2, "0")}`;
+    }
+
+    function calculateRun() {
+      const count = Number(document.getElementById("segmentCount").value);
+      const segments = [];
+
+      let totalDistance = 0;
+      let totalTime = 0;
+
+      for (let i = 1; i <= count; i++) {
+        const durationInput = document.getElementById(`duration-${i}`);
+        const paceInput = document.getElementById(`pace-${i}`);
+
+        if (!durationInput || !paceInput) {
+          document.getElementById("result").innerHTML =
+            "Luo segmentit ensin.";
+          return;
+        }
+
+        const durationMinutes = parseTimeToMinutes(durationInput.value);
+        const paceMinutesPerKm = parseTimeToMinutes(paceInput.value);
+
+        if (
+          !Number.isFinite(durationMinutes) ||
+          durationMinutes <= 0 ||
+          !Number.isFinite(paceMinutesPerKm) ||
+          paceMinutesPerKm <= 0
+        ) {
+          document.getElementById("result").innerHTML =
+            `Tarkista segmentin ${i} kesto ja vauhti. Käytä esimerkiksi kestoa 10 ja vauhtia 5:30.`;
+          return;
+        }
+
+        const distance = durationMinutes / paceMinutesPerKm;
+
+        segments.push({
+          number: i,
+          durationMinutes,
+          paceMinutesPerKm,
+          distance
+        });
+
+        totalDistance += distance;
+        totalTime += durationMinutes;
+      }
+
+      const turnDistance = totalDistance / 2;
+
+      let cumulativeDistance = 0;
+      let cumulativeTime = 0;
+      let turnSegment = null;
+
+      for (const segment of segments) {
+        if (cumulativeDistance + segment.distance >= turnDistance) {
+          const distanceIntoSegment = turnDistance - cumulativeDistance;
+          const timeIntoSegment = distanceIntoSegment * segment.paceMinutesPerKm;
+
+          turnSegment = {
+            number: segment.number,
+            distanceIntoSegment,
+            timeFromStart: cumulativeTime + timeIntoSegment
+          };
+
+          break;
+        }
+
+        cumulativeDistance += segment.distance;
+        cumulativeTime += segment.durationMinutes;
+      }
+
+      let segmentRows = "";
+
+      for (const segment of segments) {
+        segmentRows += `
+          <li>
+            Segmentti ${segment.number}: 
+            ${formatMinutes(segment.durationMinutes)} min, 
+            ${formatMinutes(segment.paceMinutesPerKm)} min/km → 
+            ${formatDistance(segment.distance)}
+          </li>
+        `;
+      }
+
+      document.getElementById("result").innerHTML = `
+        <h2>Tulos</h2>
+
+        <p>
+          <strong>Lenkin kokonaispituus:</strong>
+          ${formatDistance(totalDistance)}
+        </p>
+
+        <p>
+          <strong>Kokonaisaika:</strong>
+          ${formatMinutes(totalTime)}
+        </p>
+
+        <p>
+          <strong>Käännöskohta edestakaisella lenkillä:</strong>
+          ${formatDistance(turnDistance)} lähdöstä.
+        </p>
+
+        <p>
+          Käännös osuu segmenttiin ${turnSegment.number}, noin
+          ${formatDistance(turnSegment.distanceIntoSegment)}
+          segmentin alusta.
+        </p>
+
+        <p>
+          <strong>Aika käännöskohtaan:</strong>
+          ${formatMinutes(turnSegment.timeFromStart)}
+        </p>
+
+        <h3>Segmenttikohtaiset matkat</h3>
+        <ul>${segmentRows}</ul>
+      `;
+    }
+
+    createSegments();
+  </script>
+</body>
+</html>
